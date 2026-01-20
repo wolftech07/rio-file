@@ -1,0 +1,8 @@
+.env.local
+node_modules/
+src-tauri/target/
+dist/
+target/
+*.exe
+*.msi
+.DS_Store
