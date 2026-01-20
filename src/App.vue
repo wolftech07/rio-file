@@ -7,13 +7,13 @@
           :class="['mode-btn', { active: connectionMode === 'phoenix' }]"
           @click="connectionMode = 'phoenix'"
         >
-          Phoenix Tuner X
+          🌐 Phoenix Tuner X
         </button>
         <button 
           :class="['mode-btn', { active: connectionMode === 'ssh' }]"
           @click="connectionMode = 'ssh'"
         >
-          SSH/SFTP
+          🔐 SSH/SFTP
         </button>
       </div>
       <div class="connection-form">
@@ -22,12 +22,12 @@
             <label>RoboRIO Host</label>
             <input 
               v-model="host" 
-              placeholder="roboRIO-TEAM.local or 10.xx.xx.2"
+              placeholder="roboRIO-TEAM.local"
               @keyup.enter="connectPhoenix"
             />
           </div>
           <button @click="connectPhoenix" :disabled="!host || loading">
-            {{ loading ? 'Connecting...' : 'Connect' }}
+            {{ loading ? '⏳ Connecting...' : '✨ Connect' }}
           </button>
         </div>
         <div v-else class="ssh-form">
@@ -35,7 +35,7 @@
             <label>RoboRIO Host</label>
             <input 
               v-model="host" 
-              placeholder="roboRIO-TEAM.local or 10.xx.xx.2"
+              placeholder="roboRIO-TEAM.local"
               @keyup.enter="connectSSH"
             />
           </div>
@@ -52,12 +52,12 @@
             <input 
               v-model="sshPassword" 
               type="password"
-              placeholder="password"
+              placeholder="••••••••"
               @keyup.enter="connectSSH"
             />
           </div>
           <button @click="connectSSH" :disabled="!host || !sshUsername || loading">
-            {{ loading ? 'Connecting...' : 'Connect' }}
+            {{ loading ? '⏳ Connecting...' : '✨ Connect' }}
           </button>
         </div>
       </div>
@@ -75,9 +75,9 @@
         placeholder="/root"
         @keyup.enter="listFiles"
       />
-      <button @click="listFiles" :disabled="loading">{{ loading ? 'Loading...' : 'Refresh' }}</button>
-      <button @click="goBack" :disabled="loading">Back</button>
-      <button @click="uploadFile" :disabled="loading">Upload</button>
+      <button @click="listFiles" :disabled="loading" title="Reload current directory">📄 Refresh</button>
+      <button @click="goBack" :disabled="loading" title="Go to parent directory">⬅️ Back</button>
+      <button @click="uploadFile" :disabled="loading" title="Upload a file">⬆️ Upload</button>
       <input 
         ref="fileInput" 
         type="file" 
@@ -89,14 +89,14 @@
     <div v-if="connected" class="content">
       <div class="file-list">
         <div v-if="errorMessage" class="error-message">
-          {{ errorMessage }}
+          ⚠️ {{ errorMessage }}
         </div>
         <div v-if="successMessage" class="success-message">
-          {{ successMessage }}
+          ✓ {{ successMessage }}
         </div>
 
         <div v-if="files.length === 0 && !loading" class="empty">
-          <p>No files found or not connected</p>
+          <p>📭 No files found</p>
         </div>
 
         <div v-for="file in files" :key="file.path" class="file-item">
@@ -106,16 +106,16 @@
           <div class="file-info" @click="openFile(file)">
             <div class="file-name">{{ file.name }}</div>
             <div class="file-meta">
-              {{ file.is_dir ? 'Folder' : formatSize(file.size) }} · 
+              {{ file.is_dir ? 'Folder' : formatSize(file.size) }} • 
               {{ formatDate(file.modified) }}
             </div>
           </div>
           <div class="file-actions">
-            <button v-if="!file.is_dir" @click="downloadFile(file)" :disabled="loading">
-              Download
+            <button v-if="!file.is_dir" @click="downloadFile(file)" :disabled="loading" title="Download this file">
+              ⬇️
             </button>
-            <button @click="deleteFile(file)" :disabled="loading">
-              Delete
+            <button @click="deleteFile(file)" :disabled="loading" title="Delete this file">
+              🗑️
             </button>
           </div>
         </div>
@@ -123,7 +123,10 @@
     </div>
 
     <div v-else class="empty" style="display: flex; align-items: center; justify-content: center;">
-      <p>Connect to your RoboRIO to get started</p>
+      <div style="text-align: center;">
+        <p style="font-size: 18px; margin-bottom: 8px;">🚀 Ready to Connect</p>
+        <p style="opacity: 0.7;">Select a connection mode above and enter your RoboRIO details</p>
+      </div>
     </div>
   </div>
 </template>
