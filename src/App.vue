@@ -1,22 +1,72 @@
 <template>
   <div class="container">
-    <div class="header">
-      <h1>🤖 RoboRIO File Explorer</h1>
-      <div class="mode-selector">
-        <button 
-          :class="['mode-btn', { active: connectionMode === 'phoenix' }]"
-          @click="connectionMode = 'phoenix'"
-        >
-          🌐 Phoenix Tuner X
-        </button>
-        <button 
-          :class="['mode-btn', { active: connectionMode === 'ssh' }]"
-          @click="connectionMode = 'ssh'"
-        >
-          🔐 SSH/SFTP
-        </button>
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h1 class="app-title">RoboRIO</h1>
       </div>
-      <div class="connection-form">
+      <div class="sidebar-section">
+        <h3 class="sidebar-section-title">Navigation</h3>
+        <div class="sidebar-item active">
+          <span class="sidebar-icon">📁</span>
+          <span>Files</span>
+        </div>
+        <div class="sidebar-item">
+          <span class="sidebar-icon">⭐</span>
+          <span>Favorites</span>
+        </div>
+        <div class="sidebar-item">
+          <span class="sidebar-icon">📤</span>
+          <span>Uploads</span>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <h3 class="sidebar-section-title">Quick Tags</h3>
+        <div class="tag-item" style="--tag-color: #ef4444;">
+          <span class="tag-dot"></span>
+          <span>Critical</span>
+        </div>
+        <div class="tag-item" style="--tag-color: #f97316;">
+          <span class="tag-dot"></span>
+          <span>Important</span>
+        </div>
+        <div class="tag-item" style="--tag-color: #eab308;">
+          <span class="tag-dot"></span>
+          <span>Active</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="header">
+        <div class="header-left">
+          <button class="nav-btn" @click="goBack" title="Go back">‹</button>
+          <button class="nav-btn" title="Go forward">›</button>
+          <div class="breadcrumb">
+            <span>RoboRIO</span>
+            <span v-for="part in currentPathParts" :key="part" class="breadcrumb-part">/ {{ part }}</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="mode-selector">
+            <button 
+              :class="['mode-btn', { active: connectionMode === 'phoenix' }]"
+              @click="connectionMode = 'phoenix'"
+              title="Phoenix Tuner X"
+            >
+              🌐
+            </button>
+            <button 
+              :class="['mode-btn', { active: connectionMode === 'ssh' }]"
+              @click="connectionMode = 'ssh'"
+              title="SSH/SFTP"
+            >
+              🔐
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="connection-panel">
         <div v-if="connectionMode === 'phoenix'" class="phoenix-form">
           <div class="form-group">
             <label>RoboRIO Host</label>
@@ -26,7 +76,7 @@
               @keyup.enter="connectPhoenix"
             />
           </div>
-          <button @click="connectPhoenix" :disabled="!host || loading">
+          <button @click="connectPhoenix" :disabled="!host || loading" class="connect-btn">
             {{ loading ? '⏳ Connecting...' : '✨ Connect' }}
           </button>
         </div>
@@ -56,78 +106,92 @@
               @keyup.enter="connectSSH"
             />
           </div>
-          <button @click="connectSSH" :disabled="!host || !sshUsername || loading">
+          <button @click="connectSSH" :disabled="!host || !sshUsername || loading" class="connect-btn">
             {{ loading ? '⏳ Connecting...' : '✨ Connect' }}
           </button>
         </div>
       </div>
-    </div>
 
-    <div v-if="statusMessage" :class="['status', statusType]">
-      {{ statusMessage }}
-    </div>
+      <div v-if="statusMessage" :class="['status-banner', statusType]">
+        {{ statusMessage }}
+      </div>
 
-    <div v-if="connected" class="toolbar">
-      <input 
-        v-model="currentPath" 
-        type="text" 
-        class="path-input"
-        placeholder="/root"
-        @keyup.enter="listFiles"
-      />
-      <button @click="listFiles" :disabled="loading" title="Reload current directory">📄 Refresh</button>
-      <button @click="goBack" :disabled="loading" title="Go to parent directory">⬅️ Back</button>
-      <button @click="uploadFile" :disabled="loading" title="Upload a file">⬆️ Upload</button>
-      <input 
-        ref="fileInput" 
-        type="file" 
-        style="display: none" 
-        @change="handleFileSelect"
-      />
-    </div>
-
-    <div v-if="connected" class="content">
-      <div class="file-list">
-        <div v-if="errorMessage" class="error-message">
+      <div v-if="connected" class="files-section">
+        <div v-if="errorMessage" class="alert alert-error">
           ⚠️ {{ errorMessage }}
         </div>
-        <div v-if="successMessage" class="success-message">
+        <div v-if="successMessage" class="alert alert-success">
           ✓ {{ successMessage }}
         </div>
 
-        <div v-if="files.length === 0 && !loading" class="empty">
+        <div v-if="files.length === 0 && !loading" class="empty-state">
           <p>📭 No files found</p>
         </div>
 
-        <div v-for="file in files" :key="file.path" class="file-item">
-          <div class="file-icon">
-            {{ file.is_dir ? '📁' : '📄' }}
-          </div>
-          <div class="file-info" @click="openFile(file)">
-            <div class="file-name">{{ file.name }}</div>
-            <div class="file-meta">
-              {{ file.is_dir ? 'Folder' : formatSize(file.size) }} • 
-              {{ formatDate(file.modified) }}
+        <div class="files-grid">
+          <div v-for="file in files" :key="file.path" class="file-card">
+            <div class="file-thumbnail">
+              {{ file.is_dir ? '📁' : getFileIcon(file.name) }}
+            </div>
+            <div class="file-details">
+              <div class="file-name">{{ file.name }}</div>
+              <div class="file-size">{{ file.is_dir ? 'Folder' : formatSize(file.size) }}</div>
+            </div>
+            <div class="file-actions">
+              <button 
+                v-if="!file.is_dir" 
+                @click="downloadFile(file)" 
+                :disabled="loading" 
+                class="action-btn"
+                title="Download"
+              >
+                ⬇️
+              </button>
+              <button 
+                @click="openFile(file)" 
+                :disabled="loading" 
+                class="action-btn"
+                :title="file.is_dir ? 'Open folder' : 'Open file'"
+              >
+                ▶️
+              </button>
+              <button 
+                @click="deleteFile(file)" 
+                :disabled="loading" 
+                class="action-btn danger"
+                title="Delete"
+              >
+                🗑️
+              </button>
             </div>
           </div>
-          <div class="file-actions">
-            <button v-if="!file.is_dir" @click="downloadFile(file)" :disabled="loading" title="Download this file">
-              ⬇️
-            </button>
-            <button @click="deleteFile(file)" :disabled="loading" title="Delete this file">
-              🗑️
-            </button>
-          </div>
+        </div>
+
+        <div class="toolbar">
+          <button @click="uploadFile" :disabled="loading" class="toolbar-btn">
+            ⬆️ Upload
+          </button>
+          <button @click="listFiles" :disabled="loading" class="toolbar-btn">
+            🔄 Refresh
+          </button>
+          <input 
+            ref="fileInput" 
+            type="file" 
+            style="display: none" 
+            @change="handleFileSelect"
+          />
+        </div>
+      </div>
+
+      <div v-else class="empty-state-full">
+        <div class="empty-content">
+          <p class="empty-title">🚀 Ready to Connect</p>
+          <p class="empty-subtitle">Select a connection mode and enter your RoboRIO details</p>
         </div>
       </div>
     </div>
+  </div>
 
-    <div v-else class="empty" style="display: flex; align-items: center; justify-content: center;">
-      <div style="text-align: center;">
-        <p style="font-size: 18px; margin-bottom: 8px;">🚀 Ready to Connect</p>
-        <p style="opacity: 0.7;">Select a connection mode above and enter your RoboRIO details</p>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -304,12 +368,31 @@ export default {
       return new Date(timestamp * 1000).toLocaleDateString()
     }
 
+    const getFileIcon = (filename) => {
+      const ext = filename.split('.').pop().toLowerCase()
+      const icons = {
+        'pdf': '📕', 'doc': '📘', 'docx': '📘', 'txt': '📄',
+        'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
+        'mp3': '🎵', 'mp4': '🎬', 'avi': '🎬',
+        'zip': '📦', 'rar': '📦', '7z': '📦',
+        'exe': '⚙️', 'sh': '⚙️', 'py': '🐍', 'js': '📜',
+      }
+      return icons[ext] || '📄'
+    }
+
+    const currentPathParts = ref([])
+    
+    const updatePathParts = () => {
+      currentPathParts.value = currentPath.value.split('/').filter(p => p)
+    }
+
     return {
       connectionMode,
       host,
       sshUsername,
       sshPassword,
       currentPath,
+      currentPathParts,
       files,
       connected,
       loading,
@@ -329,6 +412,7 @@ export default {
       handleFileSelect,
       formatSize,
       formatDate,
+      getFileIcon,
     }
   },
 }
