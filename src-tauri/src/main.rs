@@ -6,11 +6,13 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use std::io::Read;
 use std::net::TcpStream;
 use std::path::Path;
 use ssh2::Session;
+use base64::{Engine as _, engine::general_purpose};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct FileInfo {
@@ -41,6 +43,7 @@ struct PhoenixConnection {
   port: u16,
 }
 
+#[allow(dead_code)]
 struct SSHConnection {
   session: Session,
   host: String,
@@ -64,7 +67,7 @@ async fn connect_phoenix(
   match client.get(&url).send().await {
     Ok(response) => {
       if response.status().is_success() {
-        let mut conn = connection.lock().unwrap();
+        let mut conn = connection.lock().await;
         conn.connection_type = Some(ConnectionType::Phoenix);
         conn.phoenix = Some(PhoenixConnection {
           client,
@@ -104,7 +107,7 @@ async fn connect_ssh(
     .userauth_password(&username, &password)
     .map_err(|e| format!("Authentication failed: {}", e))?;
 
-  let mut conn = connection.lock().unwrap();
+  let mut conn = connection.lock().await;
   conn.connection_type = Some(ConnectionType::SSH);
   conn.ssh = Some(SSHConnection {
     session,
@@ -121,7 +124,7 @@ async fn list_files(
   path: String,
   connection: State<'_, Arc<Mutex<RioConnection>>>,
 ) -> Result<Vec<FileInfo>, String> {
-  let conn = connection.lock().unwrap();
+  let conn = connection.lock().await;
   
   match &conn.connection_type {
     Some(ConnectionType::Phoenix) => {
@@ -136,7 +139,7 @@ async fn list_files(
 
 async fn list_files_phoenix(conn: &RioConnection, path: &str) -> Result<Vec<FileInfo>, String> {
   let phoenix = conn.phoenix.as_ref().ok_or("Phoenix connection lost")?;
-  let encoded_path = base64::encode(path);
+  let encoded_path = general_purpose::STANDARD.encode(path);
   let url = format!("http://{}:{}/api/v1/files?path={}", phoenix.host, phoenix.port, encoded_path);
 
   match phoenix.client.get(&url).send().await {
@@ -158,7 +161,7 @@ async fn list_files_phoenix(conn: &RioConnection, path: &str) -> Result<Vec<File
 
 fn list_files_ssh(conn: &RioConnection, path: &str) -> Result<Vec<FileInfo>, String> {
   let ssh = conn.ssh.as_ref().ok_or("SSH connection lost")?;
-  let mut sftp = ssh.session
+  let sftp = ssh.session
     .sftp()
     .map_err(|e| format!("SFTP error: {}", e))?;
 
@@ -177,7 +180,7 @@ fn list_files_ssh(conn: &RioConnection, path: &str) -> Result<Vec<FileInfo>, Str
       path: path.to_string_lossy().to_string(),
       is_dir: stat.is_dir(),
       size: stat.size.unwrap_or(0),
-      modified: stat.mtime.unwrap_or(0),
+      modified: stat.mtime.unwrap_or(0) as i64,
     })
     .collect();
 
@@ -190,7 +193,7 @@ async fn download_file(
   local_path: String,
   connection: State<'_, Arc<Mutex<RioConnection>>>,
 ) -> Result<String, String> {
-  let conn = connection.lock().unwrap();
+  let conn = connection.lock().await;
   
   match &conn.connection_type {
     Some(ConnectionType::Phoenix) => {
@@ -205,7 +208,7 @@ async fn download_file(
 
 async fn download_file_phoenix(conn: &RioConnection, remote_path: &str, local_path: &str) -> Result<String, String> {
   let phoenix = conn.phoenix.as_ref().ok_or("Phoenix connection lost")?;
-  let encoded_path = base64::encode(remote_path);
+  let encoded_path = general_purpose::STANDARD.encode(remote_path);
   let url = format!("http://{}:{}/api/v1/download?path={}", phoenix.host, phoenix.port, encoded_path);
 
   match phoenix.client.get(&url).send().await {
@@ -226,7 +229,7 @@ async fn download_file_phoenix(conn: &RioConnection, remote_path: &str, local_pa
 
 fn download_file_ssh(conn: &RioConnection, remote_path: &str, local_path: &str) -> Result<String, String> {
   let ssh = conn.ssh.as_ref().ok_or("SSH connection lost")?;
-  let mut sftp = ssh.session
+  let sftp = ssh.session
     .sftp()
     .map_err(|e| format!("SFTP error: {}", e))?;
 
@@ -251,7 +254,7 @@ async fn upload_file(
   remote_path: String,
   connection: State<'_, Arc<Mutex<RioConnection>>>,
 ) -> Result<String, String> {
-  let conn = connection.lock().unwrap();
+  let conn = connection.lock().await;
   
   match &conn.connection_type {
     Some(ConnectionType::Phoenix) => {
@@ -270,7 +273,7 @@ async fn upload_file_phoenix(conn: &RioConnection, local_path: &str, remote_path
   let contents = std::fs::read(local_path)
     .map_err(|e| format!("Failed to read local file: {}", e))?;
 
-  let encoded_path = base64::encode(remote_path);
+  let encoded_path = general_purpose::STANDARD.encode(remote_path);
   let url = format!("http://{}:{}/api/v1/upload?path={}", phoenix.host, phoenix.port, encoded_path);
 
   match phoenix.client
@@ -297,7 +300,7 @@ async fn upload_file_phoenix(conn: &RioConnection, local_path: &str, remote_path
 
 fn upload_file_ssh(conn: &RioConnection, local_path: &str, remote_path: &str) -> Result<String, String> {
   let ssh = conn.ssh.as_ref().ok_or("SSH connection lost")?;
-  let mut sftp = ssh.session
+  let sftp = ssh.session
     .sftp()
     .map_err(|e| format!("SFTP error: {}", e))?;
 
@@ -319,7 +322,7 @@ async fn delete_file(
   path: String,
   connection: State<'_, Arc<Mutex<RioConnection>>>,
 ) -> Result<String, String> {
-  let conn = connection.lock().unwrap();
+  let conn = connection.lock().await;
   
   match &conn.connection_type {
     Some(ConnectionType::Phoenix) => {
@@ -334,7 +337,7 @@ async fn delete_file(
 
 async fn delete_file_phoenix(conn: &RioConnection, path: &str) -> Result<String, String> {
   let phoenix = conn.phoenix.as_ref().ok_or("Phoenix connection lost")?;
-  let encoded_path = base64::encode(path);
+  let encoded_path = general_purpose::STANDARD.encode(path);
   let url = format!("http://{}:{}/api/v1/delete?path={}", phoenix.host, phoenix.port, encoded_path);
 
   match phoenix.client.delete(&url).send().await {
@@ -356,7 +359,7 @@ async fn delete_file_phoenix(conn: &RioConnection, path: &str) -> Result<String,
 
 fn delete_file_ssh(conn: &RioConnection, path: &str) -> Result<String, String> {
   let ssh = conn.ssh.as_ref().ok_or("SSH connection lost")?;
-  let mut sftp = ssh.session
+  let sftp = ssh.session
     .sftp()
     .map_err(|e| format!("SFTP error: {}", e))?;
 
